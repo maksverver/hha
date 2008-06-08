@@ -8,6 +8,10 @@
 #include <unistd.h>
 #include <zlib.h>
 
+#ifdef WIN32
+#define mkdir(path,mode) mkdir(path)
+#endif
+
 static enum { LIST, EXTRACT } arg_mode; /* Mode of operation */
 static char *arg_path;                  /* Path to archive */
 

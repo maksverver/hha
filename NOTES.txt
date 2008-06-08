@@ -1,0 +1,18 @@
+0.1:
+- Note that extracting files REMOVES THEM FROM THE ARCHIVE!
+  Therefore, before you do anything, make a copy of your common.hha and
+  parpg.hha files. (Alternatively you can restore these files by reinstalling.)
+
+- Only extracting files stored with compression type 0 or 1 is supported.
+
+- Note that file names are case insenstive in the archive, but case senstive
+  in the Linux filesystem! The game does not refer to files using the same
+  capitalization that is used in the archive, so on Linux files may need to
+  be renamed after extracting them, or the game cannot find them and crashes.
+ 
+  To detect when this happens, try running the game as follows:
+    export LD_LIBRARY_PATH=linux_libs/
+    strace ./RainSlickEp1_bin | grep open | grep parpg/data
+  And look for misspelled filenames.
+
+
