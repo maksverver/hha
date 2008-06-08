@@ -1,0 +1,44 @@
+All integers are in little-endian byte order.
+
+
+HEADER (16 bytes)
+-----------------------------------------------------------------------------
+off type    descr
+-----------------------------------------------------------------------------
+  0 uint32  UNKNOWN (0xac2ff34f)
+  4 uint16  UNKNOWN (0)
+  6 uint16  UNKNOWN (1)
+  8 uint32  Size of string table (S)
+ 12 uint32  Number of entries in the index (I)
+-----------------------------------------------------------------------------
+
+STRINGS (S bytes)
+-----------------------------------------------------------------------------
+String table contains zero-terminated strings referenced by the index.
+-----------------------------------------------------------------------------
+
+INDEX (I*24 bytes)
+-----------------------------------------------------------------------------
+An sequence of I index entries.
+-----------------------------------------------------------------------------
+
+INDEX ENTRY (24 bytes):
+-----------------------------------------------------------------------------
+off type    descr
+-----------------------------------------------------------------------------
+   0 uint32  Directory name (byte offset in STRINGS)
+   4 uint32  File name (byte offset in STRINGS)
+   8 uint32  Compression
+                0: no compression
+                1: unknown
+                2: unknown
+  12 uint32  Offset to file (absolute byte offset)
+  16 uint32  Uncompressed size of file
+  20 uint32  Compressed size of file
+-----------------------------------------------------------------------------
+
+FILE DATA (variable):
+-----------------------------------------------------------------------------
+Every file starts at a 16-byte boundary and is padded with zeroes to fill
+the last 16-byte block.
+-----------------------------------------------------------------------------
