@@ -243,13 +243,19 @@ static void extract_entries()
 
 static void usage()
 {
-    printf ("Usage:\n"
-            "  hha list <file>      "
-            "Lists the contents of <file>\n"
-            "  hha extract <file>   "
-            "Extracts all supported files from the archive into the\n"
-            "                       "
-            "current directory AND REMOVES THEM FROM THE ARCHIVE!\n");
+    printf ("Hothead Archive tool v0.3\n\n"
+            "USAGE:\n\n"
+            "  hha list <file>            "
+            "List the contents of <file>.\n"
+            "  hha t <file>               \n\n"
+            "  hha extract <file>         "
+            "Extract all files from the archive into the\n"
+            "  hha x <file>               "
+            "current working directory.\n\n"
+            "  hha create <file> <dir>+   "
+            "Pack the specified directories into a new archive.\n"
+            "  hha c <file> <dir>+        \n\n"
+            );
     exit(0);
 }
 
@@ -257,7 +263,13 @@ void parse_args(int argc, char *argv[])
 {
     if (argc != 3) usage();
 
-    if (strcmp(argv[1], "list") == 0 || strcmp(argv[1], "l") == 0)
+    if (strcmp(argv[1], "list") == 0 || strcmp(argv[1], "t") == 0)
+    {
+        arg_mode = LIST;
+        arg_path = argv[2];
+    }
+    else
+    if (strcmp(argv[1], "list") == 0 || strcmp(argv[1], "t") == 0)
     {
         arg_mode = LIST;
         arg_path = argv[2];
