@@ -2,6 +2,7 @@
 #define COMMON_H_INCLUDED
 
 #include <stdint.h>
+#include <stdio.h>
 
 #pragma pack(push,1)
 
@@ -28,5 +29,10 @@ struct IndexEntry
 };
 
 #pragma pack(pop)
+
+
+/* Compression/decompression functions */
+void copy_deflated(FILE *src, FILE *dest, size_t size);
+void copy_lzmad(FILE *src, FILE *dest, size_t size);
 
 #endif /* ndef COMMON_H_INCLUDED */

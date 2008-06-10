@@ -19,7 +19,7 @@ String table contains zero-terminated strings referenced by the index.
 
 INDEX (I*24 bytes)
 -----------------------------------------------------------------------------
-An sequence of I index entries.
+A sequence of I index entries.
 -----------------------------------------------------------------------------
 
 INDEX ENTRY (24 bytes):
@@ -30,15 +30,21 @@ off type    descr
    4 uint32  File name (byte offset in STRINGS)
    8 uint32  Compression
                 0: no compression
-                1: unknown
-                2: unknown
+                1: Deflate compression
+                2: LZMA compression (with header removed)
   12 uint32  Offset to file (absolute byte offset)
   16 uint32  Uncompressed size of file
   20 uint32  Compressed size of file
 -----------------------------------------------------------------------------
 
+
 FILE DATA (variable):
 -----------------------------------------------------------------------------
-Every file starts at a 16-byte boundary and is padded with zeroes to fill
-the last 16-byte block.
+Every file starts at a 16-byte boundary and is padded with zeroes to the
+next 16-byte boundary.
+
+NOTE FOR LZMA DATA:
+Normal LZMA files start with 5 bytes of property data, then an 8 byte original
+file size. The LZMA files stored in the archive omit the file size, but do
+provide the property data (which is used to initialize the LZMA library).
 -----------------------------------------------------------------------------

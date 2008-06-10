@@ -1,11 +1,33 @@
-0.1:
-- Note that extracting files REMOVES THEM FROM THE ARCHIVE!
+1. External libraries
+
+This application uses some third-party software libraries. I'd like to thank
+the authors of these excellent packages for making them freely available!
+
+ - zlib (1.2.3)
+   http://www.zlib.net/
+
+ - LZMA SDK (4.58 beta)
+   http://www.7-zip.org/sdk.html
+
+
+2. Version notes
+
+Version 0.2:
+- All three compression types are now supported!
+
+- Extracting files no longer removes them from the archive, as this feature
+  was necessary only when some files could not be extracted.
+  Simply extract all files and rename/remove the original archive to use the
+  extracted (possibbly modified) files.
+
+Version 0.1:
+- Extracting files REMOVES THEM FROM THE ARCHIVE!
   Therefore, before you do anything, make a copy of your common.hha and
   parpg.hha files. (Alternatively you can restore these files by reinstalling.)
 
 - Only extracting files stored with compression type 0 or 1 is supported.
 
-- Note that file names are case insenstive in the archive, but case senstive
+- File names are case insenstive in the archive, but case senstive
   in the Linux filesystem! The game does not refer to files using the same
   capitalization that is used in the archive, so on Linux files may need to
   be renamed after extracting them, or the game cannot find them and crashes.

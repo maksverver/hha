@@ -6,7 +6,6 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <zlib.h>
 
 #ifdef WIN32
 #define mkdir(path,mode) mkdir(path)
@@ -21,11 +20,17 @@ static size_t file_size;        /* Size of file */
 static char *strings;           /* String table */
 static size_t strings_size;     /* Size of string table */
 
-static IndexEntry *index;       /* Index entries */
-static size_t index_size;       /* Number of index entries */
+static IndexEntry *entries;     /* Index entries */
+static size_t entries_size;     /* Number of index entries */
 
-static IndexEntry *new_index;
-static size_t new_index_size;
+void seekto(size_t pos)
+{
+    if (fseek(fp, (long)pos, SEEK_SET) == -1)
+    {
+        perror("Seek failed");
+        abort();
+    }
+}
 
 static void create_dir(char *path)
 {
@@ -51,15 +56,6 @@ static void create_dir(char *path)
     }
 }
 
-static void seekto(size_t pos)
-{
-    if (fseek(fp, (long)pos, SEEK_SET) == -1)
-    {
-        perror("Seek failed");
-        abort();
-    }
-}
-
 static uint32_t read_uint32()
 {
     uint8_t bytes[4];
@@ -74,23 +70,12 @@ static uint32_t read_uint32()
            ((uint32_t)bytes[2] << 16) | ((uint32_t)bytes[3] << 24);
 }
 
-static void write_uint32(uint32_t arg)
-{
-    uint8_t bytes[4] = { arg&255, (arg>>8)&255, (arg>>16)&255, (arg>>24)&255 };
-
-    if (fwrite(bytes, 4, 1, fp) != 1)
-    {
-        perror("Write failed");
-        abort();
-    }
-}
-
 static void open_archive(const char *path)
 {
     long lpos;
 
     /* Open file */
-    fp = fopen(path, arg_mode == LIST ? "rb" : "r+b");
+    fp = fopen(path, "rb");
     if (fp == NULL)
     {
         perror("Could not open archive file");
@@ -111,9 +96,9 @@ static void process_header()
 {
     seekto(8);
     strings_size = read_uint32();
-    index_size   = read_uint32();
+    entries_size = read_uint32();
     assert( strings_size <= file_size - sizeof(Header) );
-    assert( index_size   <= (file_size - strings_size - sizeof(Header)) /
+    assert( entries_size <= (file_size - strings_size - sizeof(Header)) /
                              sizeof(IndexEntry) );
 
     /* Allocate and read string table */
@@ -131,26 +116,17 @@ static void process_header()
     strings[strings_size] = '\0';   /* zero-terminate strings table */
 
     /* Allocate and read index */
-    index = malloc(sizeof(IndexEntry)*index_size);
-    if (index == NULL)
+    entries = malloc(sizeof(IndexEntry)*entries_size);
+    if (entries == NULL)
     {
         perror("Could not allocate memory for string table");
         abort();
     }
-    if (fread(index, sizeof(IndexEntry), index_size, fp) != index_size)
+    if (fread(entries, sizeof(IndexEntry), entries_size, fp) != entries_size)
     {
-        perror("Could not read index");
+        perror("Could not read index entries");
         abort();
     }
-
-    new_index = malloc(sizeof(IndexEntry)*index_size);
-    new_index_size = 0;
-    if (new_index == NULL)
-    {
-        perror("Could not allocate memory for string table");
-        abort();
-    }
-    memset(new_index, 0, sizeof(IndexEntry)*index_size);
 }
 
 static const char *strat(size_t pos)
@@ -159,16 +135,15 @@ static const char *strat(size_t pos)
     return strings + pos;
 }
 
-static void copy_uncompressed(FILE *dest, size_t offset, size_t size)
+static void copy_uncompressed(FILE *src, FILE *dest, size_t size)
 {
     char buffer[4096];
     size_t chunk;
 
-    seekto(offset);
     while (size > 0)
     {
         chunk = size > sizeof(buffer) ? sizeof(buffer) : size;
-        if (fread(buffer, 1, chunk, fp) != chunk)
+        if (fread(buffer, 1, chunk, src) != chunk)
         {
             perror("Read failed");
             abort();
@@ -180,54 +155,6 @@ static void copy_uncompressed(FILE *dest, size_t offset, size_t size)
         }
         size -= chunk;
     }
-}
-
-static void copy_deflated(FILE *dest, size_t offset, size_t size)
-{
-    z_stream zs;
-    unsigned char buf_in[4096], buf_out[4096];
-    size_t chunk;
-    int res;
-
-    memset(&zs, 0, sizeof(zs));
-    res = inflateInit2(&zs, -15);
-    assert(res == Z_OK);
-    seekto(offset);
-    while (size > 0)
-    {
-        chunk = size > sizeof(buf_in) ? sizeof(buf_in) : size;
-        if (fread(buf_in, 1, chunk, fp) != chunk)
-        {
-            perror("Read failed");
-            abort();
-        }
-        size -= chunk;
-
-        zs.next_in  = buf_in;
-        zs.avail_in = chunk;
-        do {
-            zs.next_out  = buf_out;
-            zs.avail_out = sizeof(buf_out);
-            res = inflate(&zs, Z_SYNC_FLUSH);
-            if (res != Z_OK && res != Z_STREAM_END)
-            {
-                fprintf(stderr, "WARNING: inflate failed!\n");
-                goto end;
-            }
-            chunk = sizeof(buf_out) - zs.avail_out;
-            if (fwrite(buf_out, 1, chunk, dest) != chunk)
-            {
-                perror("Write failed");
-                abort();
-            }
-        } while (zs.avail_out == 0 && zs.avail_in > 0);
-    }
-    if (res != Z_STREAM_END)
-    {
-        fprintf(stderr, "WARNING: inflate ended prematurely\n");
-    }
-end:
-    inflateEnd(&zs);
 }
 
 static void list_entries()
@@ -242,16 +169,16 @@ static void list_entries()
     printf( "----------- ----------- ----------- ----------- "
             "------------------------------\n" );
 
-    for (i = 0; i < index_size; ++i)
+    for (i = 0; i < entries_size; ++i)
     {
-        dir_name  = strat(index[i].dir_name);
-        file_name = strat(index[i].file_name);
+        dir_name  = strat(entries[i].dir_name);
+        file_name = strat(entries[i].file_name);
 
         assert(strlen(dir_name) + 1 + strlen(file_name) < sizeof(path));
         sprintf(path, "%s/%s", dir_name, file_name);
         printf( "%10ld  %10ld  %10ld  %10ld   %s\n",
-                (long)index[i].compression, (long)index[i].offset,
-                (long)index[i].size, (long)index[i].stored_size, path );
+                (long)entries[i].compression, (long)entries[i].offset,
+                (long)entries[i].size, (long)entries[i].stored_size, path );
     }
 
     printf( "----------- ----------- ----------- ----------- "
@@ -265,16 +192,15 @@ static void extract_entries()
     const char *dir_name, *file_name;
     FILE *fp_new;
 
-    for (i = 0; i < index_size; ++i)
+    for (i = 0; i < entries_size; ++i)
     {
-        dir_name  = strat(index[i].dir_name);
-        file_name = strat(index[i].file_name);
+        dir_name  = strat(entries[i].dir_name);
+        file_name = strat(entries[i].file_name);
 
-        if (index[i].compression > 1)
+        if (entries[i].compression > 2)
         {
             printf("Skipping %s/%s (compression type %d unknown)\n",
-                   dir_name, file_name, index[i].compression);
-            new_index[new_index_size++] = index[i]; /* keep file in archive */
+                   dir_name, file_name, entries[i].compression);
             continue;
         }
 
@@ -288,24 +214,27 @@ static void extract_entries()
         if (fp_new == NULL)
         {
             perror("Could not open file");
-            new_index[new_index_size++] = index[i]; /* keep file in archive */
             continue;
         }
 
-        switch (index[i].compression)
+        seekto(entries[i].offset);
+
+        switch (entries[i].compression)
         {
         case 0:
             printf("Extracting %s/%s (uncompressed)\n", dir_name, file_name);
-            copy_uncompressed(fp_new, index[i].offset, index[i].size);
+            copy_uncompressed(fp, fp_new, entries[i].stored_size);
             break;
 
         case 1:
             printf("Extracting %s/%s (deflated)\n", dir_name, file_name);
-            copy_deflated(fp_new, index[i].offset, index[i].size);
+            copy_deflated(fp, fp_new, entries[i].stored_size);
             break;
 
-        default:
-            assert(0);
+        case 2:
+            printf("Extracting %s/%s (LZMA compressed)\n", dir_name, file_name);
+            copy_lzmad(fp, fp_new, entries[i].stored_size);
+            break;
         }
 
         fclose(fp_new);
@@ -322,19 +251,6 @@ static void usage()
             "                       "
             "current directory AND REMOVES THEM FROM THE ARCHIVE!\n");
     exit(0);
-}
-
-static void write_new_index()
-{
-    seekto(16 + strings_size);
-    if (fwrite(new_index, sizeof(IndexEntry), new_index_size, fp)
-        != new_index_size)
-    {
-        perror("Could not write new index to file");
-        abort();
-    }
-    seekto(12);
-    write_uint32((uint32_t)new_index_size);
 }
 
 void parse_args(int argc, char *argv[])
@@ -375,9 +291,7 @@ int main(int argc, char *argv[])
 
     case EXTRACT:
         extract_entries();
-        write_new_index();
         break;
-
     }
     fclose(fp);
 
