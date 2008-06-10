@@ -4,25 +4,26 @@
 #include <string.h>
 #include <zlib.h>
 
-void copy_deflated(FILE *src, FILE *dest, size_t size)
+size_t copy_deflated(FILE *dst, FILE *src, size_t size_in)
 {
     z_stream zs;
     unsigned char buf_in[4096], buf_out[4096];
-    size_t chunk;
+    size_t chunk, size_out;
     int res;
 
+    size_out = 0;
     memset(&zs, 0, sizeof(zs));
     res = inflateInit2(&zs, -15);
     assert(res == Z_OK);
-    while (size > 0)
+    while (size_in > 0)
     {
-        chunk = size > sizeof(buf_in) ? sizeof(buf_in) : size;
+        chunk = size_in > sizeof(buf_in) ? sizeof(buf_in) : size_in;
         if (fread(buf_in, 1, chunk, src) != chunk)
         {
             perror("Read failed");
             abort();
         }
-        size -= chunk;
+        size_in -= chunk;
 
         zs.next_in  = buf_in;
         zs.avail_in = chunk;
@@ -37,11 +38,12 @@ void copy_deflated(FILE *src, FILE *dest, size_t size)
                 goto end;
             }
             chunk = sizeof(buf_out) - zs.avail_out;
-            if (fwrite(buf_out, 1, chunk, dest) != chunk)
+            if (fwrite(buf_out, 1, chunk, dst) != chunk)
             {
                 perror("Write failed");
                 abort();
             }
+            size_out += chunk;
         } while (zs.avail_out == 0);
     }
     if (res != Z_STREAM_END)
@@ -50,4 +52,5 @@ void copy_deflated(FILE *src, FILE *dest, size_t size)
     }
 end:
     inflateEnd(&zs);
+    return size_out;
 }

@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -11,8 +12,12 @@
 #define mkdir(path,mode) mkdir(path)
 #endif
 
-static enum { LIST, EXTRACT } arg_mode; /* Mode of operation */
-static char *arg_path;                  /* Path to archive */
+enum Mode { LIST, EXTRACT, CREATE };
+
+static enum Mode arg_mode;              /* Mode of operation */
+static char *arg_archive;               /* Path to archive */
+static char **arg_files_begin,          /* List of filesto process */
+            **arg_files_end;
 
 static FILE *fp;                /* File pointer */
 static size_t file_size;        /* Size of file */
@@ -22,15 +27,6 @@ static size_t strings_size;     /* Size of string table */
 
 static IndexEntry *entries;     /* Index entries */
 static size_t entries_size;     /* Number of index entries */
-
-void seekto(size_t pos)
-{
-    if (fseek(fp, (long)pos, SEEK_SET) == -1)
-    {
-        perror("Seek failed");
-        abort();
-    }
-}
 
 static void create_dir(char *path)
 {
@@ -92,9 +88,20 @@ static void open_archive(const char *path)
     file_size = (size_t)lpos;
 }
 
+static void close_archive()
+{
+    fclose(fp);
+}
+
 static void process_header()
 {
-    seekto(8);
+    if (read_uint32() != 0xac2ff34ful)
+    {
+        fprintf(stderr, "The specified file does not seem to be a "
+                        "Hothead Archive file.\n");
+        exit(1);
+    }
+    (void)read_uint32();
     strings_size = read_uint32();
     entries_size = read_uint32();
     assert( strings_size <= file_size - sizeof(Header) );
@@ -135,26 +142,30 @@ static const char *strat(size_t pos)
     return strings + pos;
 }
 
-static void copy_uncompressed(FILE *src, FILE *dest, size_t size)
+static size_t copy_uncompressed(FILE *dst, FILE *src, size_t size_in)
 {
     char buffer[4096];
-    size_t chunk;
+    size_t chunk, size_out;
 
-    while (size > 0)
+    size_out = 0;
+    while (size_in > 0)
     {
-        chunk = size > sizeof(buffer) ? sizeof(buffer) : size;
+        chunk = size_in > sizeof(buffer) ? sizeof(buffer) : size_in;
         if (fread(buffer, 1, chunk, src) != chunk)
         {
             perror("Read failed");
             abort();
         }
-        if (fwrite(buffer, 1, chunk, dest) != chunk)
+        if (fwrite(buffer, 1, chunk, dst) != chunk)
         {
             perror("Write failed");
             abort();
         }
-        size -= chunk;
+        size_in  -= chunk;
+        size_out += chunk;
     }
+
+    return size_out;
 }
 
 static void list_entries()
@@ -191,6 +202,7 @@ static void extract_entries()
     char path[1024];
     const char *dir_name, *file_name;
     FILE *fp_new;
+    size_t size_new;
 
     for (i = 0; i < entries_size; ++i)
     {
@@ -217,27 +229,41 @@ static void extract_entries()
             continue;
         }
 
-        seekto(entries[i].offset);
+        if (fseek(fp, (long)entries[i].offset, SEEK_SET) == -1)
+        {
+            perror("Seek failed");
+            abort();
+        }
 
         switch (entries[i].compression)
         {
         case 0:
             printf("Extracting %s/%s (uncompressed)\n", dir_name, file_name);
-            copy_uncompressed(fp, fp_new, entries[i].stored_size);
+            size_new = copy_uncompressed(fp_new, fp, entries[i].stored_size);
             break;
 
         case 1:
             printf("Extracting %s/%s (deflated)\n", dir_name, file_name);
-            copy_deflated(fp, fp_new, entries[i].stored_size);
+            size_new = copy_deflated(fp_new, fp, entries[i].stored_size);
             break;
 
         case 2:
             printf("Extracting %s/%s (LZMA compressed)\n", dir_name, file_name);
-            copy_lzmad(fp, fp_new, entries[i].stored_size);
+            size_new = copy_lzmad(fp_new, fp, entries[i].stored_size);
             break;
+
+        default:
+            size_new = 0;
         }
 
         fclose(fp_new);
+
+        if (size_new != entries[i].size)
+        {
+            fprintf(stderr, "WARNING: extracted size (%ld bytes) differs from "
+                            "recorded size (%ld bytes)\n",
+                            size_new, (long)entries[i].size);
+        }
     }
 }
 
@@ -261,28 +287,66 @@ static void usage()
 
 void parse_args(int argc, char *argv[])
 {
+    struct stat st;
+
     if (argc != 3) usage();
 
     if (strcmp(argv[1], "list") == 0 || strcmp(argv[1], "t") == 0)
     {
         arg_mode = LIST;
-        arg_path = argv[2];
-    }
-    else
-    if (strcmp(argv[1], "list") == 0 || strcmp(argv[1], "t") == 0)
-    {
-        arg_mode = LIST;
-        arg_path = argv[2];
+        arg_archive = argv[2];
     }
     else
     if (strcmp(argv[1], "extract") == 0 || strcmp(argv[1], "x") == 0)
     {
         arg_mode = EXTRACT;
-        arg_path = argv[2];
+        arg_archive = argv[2];
+    }
+    else
+    if (strcmp(argv[1], "create") == 0 || strcmp(argv[1], "c") == 0)
+    {
+        char **p;
+
+        if (argc < 4) usage();
+        arg_mode = CREATE;
+        arg_archive = argv[2];
+        arg_files_begin = &argv[3];
+        arg_files_end   = &argv[argc];
+
+        /* Ensure that arguments are indeed directories */
+        for (p = arg_files_begin; p != arg_files_end; ++p)
+        {
+            if (stat(*p, &st) != 0)
+            {
+                perror("Could not stat directory argument");
+                exit(1);
+            }
+            if (!S_ISDIR(st.st_mode))
+            {
+                fprintf(stderr, "Argument is not a directory.\n");
+                exit(1);
+            }
+        }
+
     }
     else
     {
         usage();
+    }
+
+    /* Verify that archive exists */
+    if (arg_mode == LIST || arg_mode == EXTRACT)
+    {
+        if (stat(arg_archive, &st) != 0)
+        {
+            perror("Could not stat archive file");
+            exit(1);
+        }
+        if (!S_ISREG(st.st_mode))
+        {
+            fprintf(stderr, "Archive is not a regular file.\n");
+            exit(1);
+        }
     }
 }
 
@@ -293,19 +357,27 @@ int main(int argc, char *argv[])
 
     parse_args(argc, argv);
 
-    open_archive(arg_path);
-    process_header();
     switch (arg_mode)
     {
     case LIST:
+        open_archive(arg_archive);
+        process_header();
         list_entries();
+        close_archive();
         break;
 
     case EXTRACT:
+        open_archive(arg_archive);
+        process_header();
         extract_entries();
+        close_archive();
+        break;
+
+    case CREATE:
+        create_archive(arg_archive, (const char**)arg_files_begin,
+                                    (const char**)arg_files_end);
         break;
     }
-    fclose(fp);
 
     return 0;
 }

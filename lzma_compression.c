@@ -21,10 +21,10 @@ static void LzmaFree(void *p, void *addr)
     free(addr);
 }
 
-void copy_lzmad(FILE *src, FILE *dest, size_t size)
+size_t copy_lzmad(FILE *dst, FILE *src, size_t size_in)
 {
     unsigned char buf_in[4096], buf_out[4096];
-    size_t chunk, pos_in, avail_in, avail_out;
+    size_t chunk, pos_in, avail_in, avail_out, size_out;
     unsigned char header[LZMA_PROPS_SIZE + 8];
     ISzAlloc alloc = { LzmaAlloc, LzmaFree };
     CLzmaDec ld;
@@ -38,7 +38,8 @@ void copy_lzmad(FILE *src, FILE *dest, size_t size)
         perror("Could not read LZMA properties");
         abort();
     }
-    size -= LZMA_PROPS_SIZE;
+    size_in -= LZMA_PROPS_SIZE;
+    size_out = 0;
 
     /* Allocate decompressor */
     LzmaDec_Construct(&ld);
@@ -49,13 +50,13 @@ void copy_lzmad(FILE *src, FILE *dest, size_t size)
     do {
         /* Read more input data */
         pos_in = 0;
-        chunk = size > sizeof(buf_in) ? sizeof(buf_in) : size;
+        chunk = size_in > sizeof(buf_in) ? sizeof(buf_in) : size_in;
         if (fread(buf_in, 1, chunk, src) != chunk)
         {
             perror("Read failed");
             abort();
         }
-        size -= chunk;
+        size_in -= chunk;
 
         do {
             /* Decode available input */
@@ -70,15 +71,17 @@ void copy_lzmad(FILE *src, FILE *dest, size_t size)
             pos_in += avail_in;
 
             /* Write output */
-            if (fwrite(buf_out, 1, avail_out, dest) != avail_out)
+            if (fwrite(buf_out, 1, avail_out, dst) != avail_out)
             {
                 perror("Write failed");
                 abort();
             }
+            size_out += avail_out;
+
         } while (status == LZMA_STATUS_NOT_FINISHED);
 
         /* Check for end-of-data */
-        if (size == 0 && status == LZMA_STATUS_NEEDS_MORE_INPUT)
+        if (size_in == 0 && status == LZMA_STATUS_NEEDS_MORE_INPUT)
         {
             fprintf(stderr, "WARNING: premature end of LZMA input data\n");
             goto end;
@@ -88,4 +91,14 @@ void copy_lzmad(FILE *src, FILE *dest, size_t size)
 
 end:
     LzmaDec_Free(&ld, &alloc);
+
+    return size_out;
+}
+
+size_t copy_lzmac(FILE *dst, FILE *src, size_t size)
+{
+    (void)dst;
+    (void)src;
+    (void)size;
+    assert(0); /* TODO */
 }

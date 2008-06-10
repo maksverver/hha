@@ -31,8 +31,19 @@ struct IndexEntry
 #pragma pack(pop)
 
 
-/* Compression/decompression functions */
-void copy_deflated(FILE *src, FILE *dest, size_t size);
-void copy_lzmad(FILE *src, FILE *dest, size_t size);
+/* Compression/decompression functions
+
+  Convert the first ``size'' bytes from src writing the result into ``dst''.
+  The number of bytes written is returned.
+*/
+size_t copy_deflated(FILE *dst, FILE *src, size_t size);
+size_t copy_lzmad(FILE *dst, FILE *src, size_t size);
+size_t copy_lzmac(FILE *dst, FILE *src, size_t size);
+
+/* Archive creation */
+void create_archive( const char *archive,
+                     const char * const *dirs_begin,
+                     const char * const *dirs_end );
+
 
 #endif /* ndef COMMON_H_INCLUDED */

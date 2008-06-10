@@ -1,6 +1,6 @@
 BASE_CFLAGS=-ansi -D_POSIX_C_SOURCE -Os
-SOURCES=hha.c lzma_compression.c deflate_compression.c
-OBJECTS=hha.o lzma_compression.o deflate_compression.o
+SOURCES=hha.c lzma_compression.c deflate_compression.c create_archive.c
+OBJECTS=hha.o lzma_compression.o deflate_compression.o create_archive.o
 
 # Local config:
 CFLAGS=$(BASE_CFLAGS) -Wall -Wextra -g -Iinclude/linux64
@@ -14,8 +14,8 @@ hha: $(OBJECTS)
 clean:
 	rm -f $(OBJECTS)
 
-distclean:
-	rm -f hha hha-linux32 hha-win32
+distclean: clean
+	rm -f hha hha-linux32 hha-win32.exe
 
 dist: hha-linux32 hha-win32.exe
 
