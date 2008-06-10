@@ -289,16 +289,18 @@ void parse_args(int argc, char *argv[])
 {
     struct stat st;
 
-    if (argc != 3) usage();
+    if (argc < 3) usage();
 
     if (strcmp(argv[1], "list") == 0 || strcmp(argv[1], "t") == 0)
     {
+        if (argc > 3) usage();
         arg_mode = LIST;
         arg_archive = argv[2];
     }
     else
     if (strcmp(argv[1], "extract") == 0 || strcmp(argv[1], "x") == 0)
     {
+        if (argc > 3) usage();
         arg_mode = EXTRACT;
         arg_archive = argv[2];
     }
@@ -308,6 +310,7 @@ void parse_args(int argc, char *argv[])
         char **p;
 
         if (argc < 4) usage();
+
         arg_mode = CREATE;
         arg_archive = argv[2];
         arg_files_begin = &argv[3];
@@ -318,12 +321,12 @@ void parse_args(int argc, char *argv[])
         {
             if (stat(*p, &st) != 0)
             {
-                perror("Could not stat directory argument");
+                perror(*p);
                 exit(1);
             }
             if (!S_ISDIR(st.st_mode))
             {
-                fprintf(stderr, "Argument is not a directory.\n");
+                fprintf(stderr, "%s: not a directory.\n", *p);
                 exit(1);
             }
         }
@@ -339,12 +342,12 @@ void parse_args(int argc, char *argv[])
     {
         if (stat(arg_archive, &st) != 0)
         {
-            perror("Could not stat archive file");
+            perror(arg_archive);
             exit(1);
         }
         if (!S_ISREG(st.st_mode))
         {
-            fprintf(stderr, "Archive is not a regular file.\n");
+            fprintf(stderr, "%s: not a regular file.\n", arg_archive);
             exit(1);
         }
     }
