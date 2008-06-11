@@ -1,9 +1,9 @@
-BASE_CFLAGS=-ansi -D_POSIX_C_SOURCE -Os
-SOURCES=hha.c lzma_compression.c deflate_compression.c create_archive.c
-OBJECTS=hha.o lzma_compression.o deflate_compression.o create_archive.o
+BASE_CFLAGS=-ansi -D_POSIX_C_SOURCE
+SOURCES=common.c create_archive.c deflate_compression.c hha.c lzma_compression.c
+OBJECTS=common.o create_archive.o deflate_compression.o hha.o lzma_compression.o
 
 # Local config:
-CFLAGS=$(BASE_CFLAGS) -Wall -Wextra -g -Iinclude/linux64
+CFLAGS=$(BASE_CFLAGS) -Wall -Wextra -Werror -g -Iinclude/linux64 -O0
 LDLIBS=libs/linux64/lzma.a libs/linux64/libz.a
 
 all: hha

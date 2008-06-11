@@ -3,8 +3,47 @@
 #include <stdlib.h>
 #include <string.h>
 #include <LzmaDec.h>
+#include <LzmaEnc.h>
 
-static void *LzmaAlloc(void *p, size_t size)
+struct LzmaFileReader
+{
+    ISeqInStream in;
+    FILE *fp;
+    size_t left;
+};
+
+struct LzmaFileWriter
+{
+    ISeqOutStream out;
+    FILE *fp;
+    size_t written;
+};
+
+static SRes lzma_read(void *p, void *buf, size_t *size)
+{
+    struct LzmaFileReader *reader = (struct LzmaFileReader *)p;
+    size_t chunk;
+
+    if (ferror(reader->fp)) return SZ_ERROR_READ;
+    chunk = *size < reader->left ? *size : reader->left;
+    *size = fread(buf, 1, chunk, reader->fp);
+    reader->left -= *size;
+
+    return SZ_OK;
+}
+
+static size_t lzma_write(void *p, const void *buf, size_t size)
+{
+    struct LzmaFileWriter *w = (struct LzmaFileWriter *)p;
+    size_t chunk;
+
+    chunk = fwrite(buf, 1, size, w->fp);
+    w->written += chunk;
+
+    return (SRes)chunk;
+}
+
+static void *lzma_alloc(void *p, size_t size)
 {
     void *res;
 
@@ -15,18 +54,20 @@ static void *LzmaAlloc(void *p, size_t size)
     return res;
 }
 
-static void LzmaFree(void *p, void *addr)
+static void lzma_free(void *p, void *addr)
 {
     (void)p;
     free(addr);
 }
+
+static ISzAlloc szalloc = { lzma_alloc, lzma_free };
+
 
 size_t copy_lzmad(FILE *dst, FILE *src, size_t size_in)
 {
     unsigned char buf_in[4096], buf_out[4096];
     size_t chunk, pos_in, avail_in, avail_out, size_out;
     unsigned char header[LZMA_PROPS_SIZE + 8];
-    ISzAlloc alloc = { LzmaAlloc, LzmaFree };
     CLzmaDec ld;
     ELzmaStatus status;
     int res;
@@ -43,7 +84,7 @@ size_t copy_lzmad(FILE *dst, FILE *src, size_t size_in)
 
     /* Allocate decompressor */
     LzmaDec_Construct(&ld);
-    res = LzmaDec_Allocate(&ld, header, LZMA_PROPS_SIZE, &alloc);
+    res = LzmaDec_Allocate(&ld, header, LZMA_PROPS_SIZE, &szalloc);
     assert(res == SZ_OK);
 
     LzmaDec_Init(&ld);
@@ -90,15 +131,47 @@ size_t copy_lzmad(FILE *dst, FILE *src, size_t size_in)
     } while (status == LZMA_STATUS_NEEDS_MORE_INPUT);
 
 end:
-    LzmaDec_Free(&ld, &alloc);
+    LzmaDec_Free(&ld, &szalloc);
 
     return size_out;
 }
 
 size_t copy_lzmac(FILE *dst, FILE *src, size_t size)
 {
-    (void)dst;
-    (void)src;
-    (void)size;
-    assert(0); /* TODO */
+    struct LzmaFileReader lfr;
+    struct LzmaFileWriter lfw;
+    CLzmaEncProps props;
+    CLzmaEncHandle leh;
+    int res;
+
+    /* Initialize input/output streams */
+    lfr.in.Read    = lzma_read;
+    lfr.fp         = src;
+    lfr.left       = size;
+    lfw.out.Write  = lzma_write;
+    lfw.fp         = dst;
+    lfw.written    = 0;
+
+    /* Select default encoder properties */
+    LzmaEncProps_Init(&props);
+    props.level = 7;
+    LzmaEncProps_Normalize(&props);
+
+    /* Allocate ccompressor */
+    leh = LzmaEnc_Create(&szalloc);
+    assert(leh != NULL);
+    res = LzmaEnc_SetProps(leh, &props);
+    assert(res == SZ_OK);
+
+    /* Compress */
+    res = LzmaEnc_Encode(leh, &lfw.out, &lfr.in, NULL, &szalloc, &szalloc);
+    if (res != SZ_OK || lfr.left != 0)
+    {
+        perror("LZMA compression failed");
+        abort();
+    }
+
+    LzmaEnc_Destroy(leh, &szalloc, &szalloc);
+
+    return lfw.written;
 }

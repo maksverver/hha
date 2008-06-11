@@ -6,9 +6,6 @@
 
 #pragma pack(push,1)
 
-typedef struct Header Header;
-typedef struct IndexEntry IndexEntry;
-
 struct Header
 {
     uint32_t unknown1;
@@ -30,20 +27,34 @@ struct IndexEntry
 
 #pragma pack(pop)
 
+enum Compression
+{
+    COM_NONE    = 0,
+    COM_DEFLATE = 1,
+    COM_LZMA    = 2
+};
+
+typedef struct Header Header;
+typedef struct IndexEntry IndexEntry;
+typedef enum Compression Compression;
+
 
 /* Compression/decompression functions
 
-  Convert the first ``size'' bytes from src writing the result into ``dst''.
-  The number of bytes written is returned.
+   Convert the first ``size'' bytes from src writing the result into ``dst''.
+   The number of bytes written is returned.
 */
+size_t copy_uncompressed(FILE *dst, FILE *src, size_t size);
 size_t copy_deflated(FILE *dst, FILE *src, size_t size);
+size_t copy_deflatec(FILE *dst, FILE *src, size_t size);
 size_t copy_lzmad(FILE *dst, FILE *src, size_t size);
 size_t copy_lzmac(FILE *dst, FILE *src, size_t size);
 
 /* Archive creation */
-void create_archive( const char *archive,
+void create_archive( const char *archive_path,
                      const char * const *dirs_begin,
-                     const char * const *dirs_end );
+                     const char * const *dirs_end,
+                     Compression com );
 
 
 #endif /* ndef COMMON_H_INCLUDED */

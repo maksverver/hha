@@ -18,6 +18,7 @@ static enum Mode arg_mode;              /* Mode of operation */
 static char *arg_archive;               /* Path to archive */
 static char **arg_files_begin,          /* List of filesto process */
             **arg_files_end;
+static Compression arg_com;             /* Compression to use */
 
 static FILE *fp;                /* File pointer */
 static size_t file_size;        /* Size of file */
@@ -142,32 +143,6 @@ static const char *strat(size_t pos)
     return strings + pos;
 }
 
-static size_t copy_uncompressed(FILE *dst, FILE *src, size_t size_in)
-{
-    char buffer[4096];
-    size_t chunk, size_out;
-
-    size_out = 0;
-    while (size_in > 0)
-    {
-        chunk = size_in > sizeof(buffer) ? sizeof(buffer) : size_in;
-        if (fread(buffer, 1, chunk, src) != chunk)
-        {
-            perror("Read failed");
-            abort();
-        }
-        if (fwrite(buffer, 1, chunk, dst) != chunk)
-        {
-            perror("Write failed");
-            abort();
-        }
-        size_in  -= chunk;
-        size_out += chunk;
-    }
-
-    return size_out;
-}
-
 static void list_entries()
 {
     size_t i;
@@ -237,17 +212,17 @@ static void extract_entries()
 
         switch (entries[i].compression)
         {
-        case 0:
+        case COM_NONE:
             printf("Extracting %s/%s (uncompressed)\n", dir_name, file_name);
             size_new = copy_uncompressed(fp_new, fp, entries[i].stored_size);
             break;
 
-        case 1:
+        case COM_DEFLATE:
             printf("Extracting %s/%s (deflated)\n", dir_name, file_name);
             size_new = copy_deflated(fp_new, fp, entries[i].stored_size);
             break;
 
-        case 2:
+        case COM_LZMA:
             printf("Extracting %s/%s (LZMA compressed)\n", dir_name, file_name);
             size_new = copy_lzmad(fp_new, fp, entries[i].stored_size);
             break;
@@ -269,23 +244,28 @@ static void extract_entries()
 
 static void usage()
 {
-    printf ("Hothead Archive tool v0.3\n\n"
-            "USAGE:\n\n"
-            "  hha list <file>            "
-            "List the contents of <file>.\n"
-            "  hha t <file>               \n\n"
-            "  hha extract <file>         "
-            "Extract all files from the archive into the\n"
-            "  hha x <file>               "
-            "current working directory.\n\n"
-            "  hha create <file> <dir>+   "
-            "Pack the specified directories into a new archive.\n"
-            "  hha c <file> <dir>+        \n\n"
-            );
+    printf ("Hothead Archive tool v0.3\n"
+"\n"
+"Usage:\n"
+"\n"
+"  hha list <file>                    -- List the contents of <file>.\n"
+"  hha t <file>\n"
+"\n"
+"  hha extract <file>                 -- Extract all files from the archive\n"
+"  hha x <file>                          into the current working directory.\n"
+"\n"
+"  hha create [opts] <file> <dir>+    -- Pack the specified directories into a\n"
+"  hha c [opts] <file> <dir>+            new archive.\n"
+"\n"
+"  Compression options:\n"
+"    -0  No compression (default)\n"
+"    -1  Deflate compression\n"
+"    -2  LZMA compression\n" );
+
     exit(0);
 }
 
-void parse_args(int argc, char *argv[])
+static void parse_args(int argc, char *argv[])
 {
     struct stat st;
 
@@ -294,14 +274,14 @@ void parse_args(int argc, char *argv[])
     if (strcmp(argv[1], "list") == 0 || strcmp(argv[1], "t") == 0)
     {
         if (argc > 3) usage();
-        arg_mode = LIST;
+        arg_mode    = LIST;
         arg_archive = argv[2];
     }
     else
     if (strcmp(argv[1], "extract") == 0 || strcmp(argv[1], "x") == 0)
     {
         if (argc > 3) usage();
-        arg_mode = EXTRACT;
+        arg_mode    = EXTRACT;
         arg_archive = argv[2];
     }
     else
@@ -309,12 +289,35 @@ void parse_args(int argc, char *argv[])
     {
         char **p;
 
+        arg_mode = CREATE;
         if (argc < 4) usage();
 
-        arg_mode = CREATE;
-        arg_archive = argv[2];
-        arg_files_begin = &argv[3];
-        arg_files_end   = &argv[argc];
+        if (argv[2][0] == '-')
+        {
+            /* Parse options */
+            while (*++argv[2] != '\0')
+            {
+                switch (*argv[2])
+                {
+                case '0': arg_com = COM_NONE;    break;
+                case '1': arg_com = COM_DEFLATE; break;
+                case '2': arg_com = COM_LZMA;    break;
+                default:  usage();
+                }
+            }
+            arg_archive     = argv[3];
+            arg_files_begin = &argv[4];
+            arg_files_end   = &argv[argc];
+        }
+        else
+        {
+            arg_archive     = argv[2];
+            arg_files_begin = &argv[3];
+            arg_files_end   = &argv[argc];
+            arg_com         = COM_NONE;
+        }
+
+        if (arg_files_begin == arg_files_end) usage();
 
         /* Ensure that arguments are indeed directories */
         for (p = arg_files_begin; p != arg_files_end; ++p)
@@ -378,7 +381,7 @@ int main(int argc, char *argv[])
 
     case CREATE:
         create_archive(arg_archive, (const char**)arg_files_begin,
-                                    (const char**)arg_files_end);
+                                    (const char**)arg_files_end, arg_com);
         break;
     }
 
