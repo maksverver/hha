@@ -5,8 +5,14 @@
 #include <string.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #define PATH_LEN 1024
+
+
+int ftruncate(int fd, off_t length);
+
 
 /* Global variables -- used while creating an archive */
 
@@ -192,11 +198,71 @@ static void write_headers()
     write_padding();
 }
 
-static void write_files(Compression com)
+static size_t write_file(const char *path, size_t size_in, Compression *max_com)
+{
+    FILE *fp_in;
+    Compression best_com;
+    size_t size, best_size;
+
+    fp_in = fopen(path, "rb");
+    assert(fp_in != NULL);
+
+    /* Initially, assume no compression is best. */
+    best_com  = COM_NONE;
+    best_size = size_in;
+
+    if (*max_com >= COM_DEFLATE)
+    {
+        /* Try deflate compression */
+        fseek(fp, pos, SEEK_SET);
+        rewind(fp_in);
+        size = copy_deflatec(fp, fp_in, size_in);
+        if (size < best_size)
+        {
+            best_size = size;
+            best_com  = COM_DEFLATE;
+        }
+    }
+
+    if (*max_com >= COM_LZMA)
+    {
+        /* Try LZMA compression */
+        fseek(fp, pos, SEEK_SET);
+        rewind(fp_in);
+        size = copy_lzmac(fp, fp_in, size_in);
+        if (size < best_size)
+        {
+            best_size = size;
+            best_com  = COM_LZMA;
+        }
+    }
+
+    if (best_com == COM_NONE)
+    {
+        fseek(fp, pos, SEEK_SET);
+        rewind(fp_in);
+        size = copy_uncompressed(fp, fp_in, size_in);
+    }
+
+    if (best_com == COM_DEFLATE && *max_com > COM_DEFLATE)
+    {
+        fseek(fp, pos, SEEK_SET);
+        rewind(fp_in);
+        size = copy_deflatec(fp, fp_in, size_in);
+    }
+
+    fclose(fp_in);
+
+    *max_com = best_com;
+    assert(size == best_size);
+    return best_size;
+}
+
+static void write_files(Compression max_com)
 {
     size_t i;
-    FILE *fp_in;
     char path[PATH_LEN];
+    Compression com;
     size_t stored_size;
 
     for (i = 0; i < entries_size; ++i)
@@ -207,34 +273,19 @@ static void write_files(Compression com)
 
         printf("Adding %s...\n", path);
 
-        fp_in = fopen(path, "rb");
-        assert(fp_in != NULL);
-        switch (com)
-        {
-        case COM_NONE:
-            stored_size = copy_uncompressed(fp, fp_in, entries[i].size);
-            break;
-
-        case COM_DEFLATE:
-            stored_size = copy_deflatec(fp, fp_in, entries[i].size);
-            break;
-
-        case COM_LZMA:
-            stored_size = copy_lzmac(fp, fp_in, entries[i].size);
-            break;
-
-        default:
-            assert(0);
-        }
-        fclose(fp_in);
+        com = max_com;
+        stored_size = write_file(path, entries[i].size, &com);
 
         entries[i].compression = com;
         entries[i].offset      = pos;
         entries[i].stored_size = stored_size;
 
-        pos += stored_size;
+        pos += entries[i].stored_size;
         write_padding();
     }
+
+    /* Truncate to remove extra data */
+    ftruncate(fileno(fp), pos);
 }
 
 static void rewrite_index()

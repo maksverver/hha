@@ -64,7 +64,7 @@ size_t copy_deflatec(FILE *dst, FILE *src, size_t size_in)
 
     size_out = 0;
     memset(&zs, 0, sizeof(zs));
-    res = deflateInit2( &zs, Z_DEFAULT_COMPRESSION, Z_DEFLATED, -15,
+    res = deflateInit2( &zs, Z_BEST_COMPRESSION, Z_DEFLATED, -15,
                              MAX_MEM_LEVEL, Z_DEFAULT_STRATEGY );
     assert(res == Z_OK);
     while (size_in > 0)

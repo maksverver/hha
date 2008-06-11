@@ -149,11 +149,11 @@ static void list_entries()
     char path[1024];
     const char *dir_name, *file_name;
 
-    printf( "Compression   Offset       Size     Stored Size "
+    printf( "Com   Offset       Size     Stored Size "
             " File path                    \n" );
 
-    printf( "----------- ----------- ----------- ----------- "
-            "------------------------------\n" );
+    printf( "--- ----------- ----------- ----------- "
+            "---------------------------------------\n" );
 
     for (i = 0; i < entries_size; ++i)
     {
@@ -162,13 +162,13 @@ static void list_entries()
 
         assert(strlen(dir_name) + 1 + strlen(file_name) < sizeof(path));
         sprintf(path, "%s/%s", dir_name, file_name);
-        printf( "%10ld  %10ld  %10ld  %10ld   %s\n",
+        printf( " %ld  %10ld  %10ld  %10ld   %s\n",
                 (long)entries[i].compression, (long)entries[i].offset,
                 (long)entries[i].size, (long)entries[i].stored_size, path );
     }
 
     printf( "----------- ----------- ----------- ----------- "
-            "------------------------------\n" );
+            "---------------------------------------\n" );
 }
 
 static void extract_entries()
@@ -260,7 +260,9 @@ static void usage()
 "  Compression options:\n"
 "    -0  No compression (default)\n"
 "    -1  Deflate compression\n"
-"    -2  LZMA compression\n" );
+"    -2  LZMA compression\n"
+"  Note that these values specify maximum compression; a lower value may be\n"
+"  selected if it yields an equal or smaller size.\n");
 
     exit(0);
 }

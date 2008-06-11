@@ -154,7 +154,7 @@ size_t copy_lzmac(FILE *dst, FILE *src, size_t size)
 
     /* Select default encoder properties */
     LzmaEncProps_Init(&props);
-    props.level = 7;
+    props.level = 8;
     LzmaEncProps_Normalize(&props);
 
     /* Allocate ccompressor */
