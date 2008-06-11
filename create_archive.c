@@ -228,7 +228,7 @@ static void write_files(Compression com)
         }
         fclose(fp_in);
 
-        entries[i].compression = COM_LZMA;
+        entries[i].compression = com;
         entries[i].offset      = pos;
         entries[i].stored_size = stored_size;
 
