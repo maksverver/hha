@@ -167,7 +167,7 @@ static void list_entries()
                 (long)entries[i].size, (long)entries[i].stored_size, path );
     }
 
-    printf( "----------- ----------- ----------- ----------- "
+    printf( "--- ----------- ----------- ----------- "
             "---------------------------------------\n" );
 }
 
