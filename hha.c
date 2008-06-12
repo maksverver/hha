@@ -258,9 +258,9 @@ static void usage()
 "  hha c [opts] <file> <dir>+            new archive.\n"
 "\n"
 "  Compression options:\n"
-"    -0  No compression (default)\n"
+"    -0  No compression\n"
 "    -1  Deflate compression\n"
-"    -2  LZMA compression\n"
+"    -2  LZMA compression (default)\n"
 "  Note that these values specify maximum compression; a lower value may be\n"
 "  selected if it yields an equal or smaller size.\n");
 
@@ -291,8 +291,11 @@ static void parse_args(int argc, char *argv[])
     {
         char **p;
 
-        arg_mode = CREATE;
         if (argc < 4) usage();
+
+        arg_mode    = CREATE;
+        arg_archive = argv[2];
+        arg_com     = COM_LZMA;
 
         if (argv[2][0] == '-')
         {
@@ -307,16 +310,13 @@ static void parse_args(int argc, char *argv[])
                 default:  usage();
                 }
             }
-            arg_archive     = argv[3];
             arg_files_begin = &argv[4];
             arg_files_end   = &argv[argc];
         }
         else
         {
-            arg_archive     = argv[2];
             arg_files_begin = &argv[3];
             arg_files_end   = &argv[argc];
-            arg_com         = COM_NONE;
         }
 
         if (arg_files_begin == arg_files_end) usage();

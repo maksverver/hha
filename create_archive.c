@@ -179,22 +179,28 @@ static void write_padding()
 static void write_headers()
 {
     /* Write header, strings table, and preliminary index table */
+    pos = 0;
     if (fwrite(&header, sizeof(header), 1, fp) != 1)
     {
         perror("Could not write archive header");
         abort();
     }
-    if (fwrite(strings, 1, strings_size, fp) != strings_size)
+    pos += sizeof(header);
+
+    if (fwrite(strings, 1, header.strings_size, fp) != header.strings_size)
     {
-        perror("Could not write archive header");
+        perror("Could not write string table");
         abort();
     }
+    pos += header.strings_size;
+
     if (fwrite(entries, sizeof(IndexEntry), entries_size, fp) != entries_size)
     {
         perror("Could not write index");
         abort();
     }
-    pos = sizeof(header) + strings_size + entries_size*sizeof(IndexEntry);
+    pos += header.index_entries*sizeof(IndexEntry);
+
     write_padding();
 }
 

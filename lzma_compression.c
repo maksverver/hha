@@ -26,8 +26,9 @@ static SRes lzma_read(void *p, void *buf, size_t *size)
 
     if (ferror(reader->fp)) return SZ_ERROR_READ;
     chunk = *size < reader->left ? *size : reader->left;
-    *size = fread(buf, 1, chunk, reader->fp);
-    reader->left -= *size;
+    chunk = fread(buf, 1, chunk, reader->fp);
+    *size = chunk;
+    reader->left -= chunk;
 
     return SZ_OK;
 }
@@ -143,17 +144,12 @@ size_t copy_lzmac(FILE *dst, FILE *src, size_t size)
     CLzmaEncProps props;
     CLzmaEncHandle leh;
     int res;
-
-    /* Initialize input/output streams */
-    lfr.in.Read    = lzma_read;
-    lfr.fp         = src;
-    lfr.left       = size;
-    lfw.out.Write  = lzma_write;
-    lfw.fp         = dst;
-    lfw.written    = 0;
+    Byte props_data[LZMA_PROPS_SIZE];
+    SizeT props_size;
 
     /* Select default encoder properties */
     LzmaEncProps_Init(&props);
+    props.writeEndMark = 1;
     LzmaEncProps_Normalize(&props);
 
     /* Allocate ccompressor */
@@ -161,6 +157,24 @@ size_t copy_lzmac(FILE *dst, FILE *src, size_t size)
     assert(leh != NULL);
     res = LzmaEnc_SetProps(leh, &props);
     assert(res == SZ_OK);
+
+    /* Write properties to file */
+    props_size = LZMA_PROPS_SIZE;
+    res = LzmaEnc_WriteProperties(leh, props_data, &props_size);
+    assert(res == SZ_OK);
+    if (fwrite(props_data, props_size, 1, dst) != 1)
+    {
+        perror("Write failed");
+        abort();
+    }
+
+    /* Initialize input/output streams */
+    lfr.in.Read    = lzma_read;
+    lfr.fp         = src;
+    lfr.left       = size;
+    lfw.out.Write  = lzma_write;
+    lfw.fp         = dst;
+    lfw.written    = props_size;
 
     /* Compress */
     res = LzmaEnc_Encode(leh, &lfw.out, &lfr.in, NULL, &szalloc, &szalloc);
