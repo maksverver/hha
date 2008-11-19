@@ -2,6 +2,9 @@
 
 source win32-env.sh
 
+ZLIBDIR=zlib-1.2.3
+LZMADIR=lzma-4.60/C
+
 ZLIBOPT="-O3"
 LZMAOPT="-O2"
 LZMASRC="7zBuf.c 7zCrc.c Alloc.c Bcj2.c Bra86.c Bra.c BraIA64.c LzFind.c \
@@ -10,7 +13,7 @@ LZMASRC="7zBuf.c 7zCrc.c Alloc.c Bcj2.c Bra86.c Bra.c BraIA64.c LzFind.c \
 
 build_zlib() {
 
-cd zlib-1.2.3 || { echo 'Missing directory zlib-1.2.3'; exit 1; }
+cd "$ZLIBDIR" || { echo "Missing directory $ZLIBDIR"; exit 1; }
 
 echo 'Building zlib for Linux64'
 make clean
@@ -38,7 +41,7 @@ cd ..
 
 build_lzma() {
 
-cd lzma-4.5.8/C || { echo 'Missing directory lzma-4.5.8/C'; exit 1; }
+cd "$LZMADIR" || { echo "Missing directory $LZMADIR"; exit 1; }
 
 echo 'Building LZMA for Linux64'
 rm -f *.o lzma.a

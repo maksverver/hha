@@ -25,6 +25,6 @@ hha-linux32: $(SOURCES) libs/linux32/libz.a libs/linux32/lzma.a
 
 hha-win32.exe: $(SOURCES) libs/win32/libz.a libs/win32/lzma.a
 	i386-mingw32msvc-gcc -DWIN32 -m32 $(BASE_CFLAGS) -Iinclude/win32 -Llibs/win32 -o "$@" $^
-	strip "$@"
+	i386-mingw32msvc-strip "$@"
 
 .PHONY: all clean dist distclean
