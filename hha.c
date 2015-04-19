@@ -194,8 +194,8 @@ static void extract_entries()
         assert(strlen(dir_name) + 1 + strlen(file_name) < sizeof(path));
         strncpy(path, dir_name, sizeof(path));
         create_dir(path);
-        strncat(path, "/", sizeof(path));
-        strncat(path, file_name, sizeof(path));
+        strncat(path, "/", sizeof(path) - 1);
+        strncat(path, file_name, sizeof(path) - 1);
 
         fp_new = fopen(path, "wb");
         if (fp_new == NULL)
