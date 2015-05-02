@@ -294,7 +294,6 @@ static void parse_args(int argc, char *argv[])
         if (argc < 4) usage();
 
         arg_mode    = CREATE;
-        arg_archive = argv[2];
         arg_com     = COM_LZMA;
 
         if (argv[2][0] == '-')
@@ -310,11 +309,13 @@ static void parse_args(int argc, char *argv[])
                 default:  usage();
                 }
             }
+            arg_archive = argv[3];
             arg_files_begin = &argv[4];
             arg_files_end   = &argv[argc];
         }
         else
         {
+            arg_archive = argv[2];
             arg_files_begin = &argv[3];
             arg_files_end   = &argv[argc];
         }
