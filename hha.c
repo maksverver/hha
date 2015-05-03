@@ -12,6 +12,8 @@
 #define mkdir(path,mode) mkdir(path)
 #endif
 
+extern char lzma_omit_uncompressed_size;  /* defined in lzma_compression.c */
+
 enum Mode { LIST, EXTRACT, CREATE };
 
 static enum Mode arg_mode;              /* Mode of operation */
@@ -244,20 +246,22 @@ static void extract_entries()
 
 static void usage()
 {
-    printf ("Hothead Archive tool v0.3\n"
+    printf ("Hothead Archive tool v0.4\n"
 "\n"
 "Usage:\n"
 "\n"
-"  hha list <file>                    -- List the contents of <file>.\n"
-"  hha t <file>\n"
+"  hha list [opts] <file>             -- List the contents of <file>.\n"
+"  hha t [opts] <file>\n"
 "\n"
-"  hha extract <file>                 -- Extract all files from the archive\n"
-"  hha x <file>                          into the current working directory.\n"
+"  hha extract [opts] <file>          -- Extract all files from the archive\n"
+"  hha x [opts] <file>                   into the current working directory.\n"
 "\n"
 "  hha create [opts] <file> <dir>+    -- Pack the specified directories into a\n"
 "  hha c [opts] <file> <dir>+            new archive.\n"
 "\n"
-"  Compression options:\n"
+"  LZMA options: (used in extract and create mode)\n"
+"    -u  Omit uncompressed size from LZMA header\n"
+"  Compression options: (used in create mode only)\n"
 "    -0  No compression\n"
 "    -1  Deflate compression\n"
 "    -2  LZMA compression (default)\n"
@@ -270,57 +274,53 @@ static void usage()
 static void parse_args(int argc, char *argv[])
 {
     struct stat st;
+    int i = 2;  /* index of first file argument */
 
     if (argc < 3) usage();
 
+    if (argv[i][0] == '-')
+    {
+        /* Parse options */
+        while (*++argv[i] != '\0')
+        {
+            switch (*argv[i])
+            {
+            case '0': arg_com = COM_NONE;    break;
+            case '1': arg_com = COM_DEFLATE; break;
+            case '2': arg_com = COM_LZMA;    break;
+            case 'u': lzma_omit_uncompressed_size = 1; break;
+            default:  usage();
+            }
+        }
+        i++;
+    }
+
     if (strcmp(argv[1], "list") == 0 || strcmp(argv[1], "t") == 0)
     {
-        if (argc > 3) usage();
+        if (argc != i + 1) usage();
         arg_mode    = LIST;
-        arg_archive = argv[2];
+        arg_archive = argv[i];
     }
     else
     if (strcmp(argv[1], "extract") == 0 || strcmp(argv[1], "x") == 0)
     {
-        if (argc > 3) usage();
+        if (argc != i + 1) usage();
         arg_mode    = EXTRACT;
-        arg_archive = argv[2];
+        arg_archive = argv[i];
     }
     else
     if (strcmp(argv[1], "create") == 0 || strcmp(argv[1], "c") == 0)
     {
         char **p;
 
-        if (argc < 4) usage();
+        if (argc < i + 2) usage();
 
         arg_mode    = CREATE;
         arg_com     = COM_LZMA;
 
-        if (argv[2][0] == '-')
-        {
-            /* Parse options */
-            while (*++argv[2] != '\0')
-            {
-                switch (*argv[2])
-                {
-                case '0': arg_com = COM_NONE;    break;
-                case '1': arg_com = COM_DEFLATE; break;
-                case '2': arg_com = COM_LZMA;    break;
-                default:  usage();
-                }
-            }
-            arg_archive = argv[3];
-            arg_files_begin = &argv[4];
-            arg_files_end   = &argv[argc];
-        }
-        else
-        {
-            arg_archive = argv[2];
-            arg_files_begin = &argv[3];
-            arg_files_end   = &argv[argc];
-        }
-
-        if (arg_files_begin == arg_files_end) usage();
+        arg_archive = argv[i++];
+        arg_files_begin = &argv[i];
+        arg_files_end   = &argv[argc];
 
         /* Ensure that arguments are indeed directories */
         for (p = arg_files_begin; p != arg_files_end; ++p)
