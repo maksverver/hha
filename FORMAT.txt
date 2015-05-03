@@ -44,7 +44,10 @@ Every file starts at a 16-byte boundary and is padded with zeroes to the
 next 16-byte boundary.
 
 NOTE FOR LZMA DATA:
-Normal LZMA files start with 5 bytes of property data, then an 8 byte original
-file size. The LZMA files stored in the archive omit the file size, but do
-provide the property data (which is used to initialize the LZMA library).
+Typical LZMA files start with 5 bytes of property data, followed by 8 bytes
+encoding the uncompressed file size. 
+
+Old versions of the HHA format (used for Penny Arcade Adventures: On the
+Rain-Slick Precipice of Darkness) omit the uncompressed file size from the
+input.
 -----------------------------------------------------------------------------
