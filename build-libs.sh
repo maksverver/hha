@@ -1,12 +1,12 @@
 #!/bin/sh
 
-source win32-env.sh
+#source win32-env.sh
 
-ZLIBDIR=zlib-1.2.3
-LZMADIR=lzma-4.60/C
+ZLIBDIR=zlib-1.2.8
+LZMADIR=lzma-9.38/C
 
 ZLIBOPT="-O3"
-LZMAOPT="-O2"
+LZMAOPT="-O2 -D_7ZIP_ST"
 LZMASRC="7zBuf.c 7zCrc.c Alloc.c Bcj2.c Bra86.c Bra.c BraIA64.c LzFind.c \
          LzmaDec.c LzmaEnc.c LzmaLib.c"
 
@@ -21,18 +21,18 @@ CFLAGS="$ZLIBOPT -m64" ./configure
 make libz.a
 cp libz.a ../libs/linux64/
 
-echo 'Building zlib for Linux32'
-make clean
-CFLAGS="$ZLIBOPT -m32 -march=i686" ./configure
-make libz.a
-cp libz.a ../libs/linux32/
+#echo 'Building zlib for Linux32'
+#make clean
+#CFLAGS="$ZLIBOPT -m32 -march=i686" ./configure
+#make libz.a
+#cp libz.a ../libs/linux32/
 
-echo 'Building zlib for Win32'
-make clean
-CFLAGS="$ZLIBOPT -m32 -march=i686" CC=i386-mingw32msvc-gcc ./configure
-make libz.a
-i386-mingw32msvc-ranlib libz.a
-cp libz.a ../libs/win32/
+#echo 'Building zlib for Win32'
+#make clean
+#CFLAGS="$ZLIBOPT -m32 -march=i686" CC=i386-mingw32msvc-gcc ./configure
+#make libz.a
+#i386-mingw32msvc-ranlib libz.a
+#cp libz.a ../libs/win32/
 
 cd ..
 
@@ -49,18 +49,18 @@ for file in $LZMASRC; do gcc $LZMAOPT -m64 -c $file; done
 ar cr lzma.a *.o
 cp lzma.a ../../libs/linux64/
 
-echo 'Building LZMA for Linux32'
-rm -f *.o lzma.a
-for file in $LZMASRC; do gcc $LZMAOPT -m32 -march=i686 -c $file; done
-ar cr lzma.a *.o
-cp lzma.a ../../libs/linux32/
+#echo 'Building LZMA for Linux32'
+#rm -f *.o lzma.a
+#for file in $LZMASRC; do gcc $LZMAOPT -m32 -march=i686 -c $file; done
+#ar cr lzma.a *.o
+#cp lzma.a ../../libs/linux32/
 
-echo 'Building LZMA for Win32'
-rm -f *.o lzma.a
-for file in $LZMASRC; do i386-mingw32msvc-gcc $LZMAOPT -m32 -march=i686 -c $file; done
-i386-mingw32msvc-ar cr lzma.a *.o
-i386-mingw32msvc-ranlib lzma.a
-cp lzma.a ../../libs/win32/
+#echo 'Building LZMA for Win32'
+#rm -f *.o lzma.a
+#for file in $LZMASRC; do i386-mingw32msvc-gcc $LZMAOPT -m32 -march=i686 -c $file; done
+#i386-mingw32msvc-ar cr lzma.a *.o
+#i386-mingw32msvc-ranlib lzma.a
+#cp lzma.a ../../libs/win32/
 
 cd ../..
 
