@@ -5,6 +5,27 @@
 #include <LzmaDec.h>
 #include <LzmaEnc.h>
 
+/* If nonzero, the LZMA header does not contain compressed size data.
+   This provides compatibility with older versions of the HHA file format. */
+char lzma_omit_uncompressed_size = 0;
+
+static long long decode_int64(unsigned char buf[8])
+{
+    long long res;
+    int i;
+
+    res = 0;
+    for (i = 0; i < 8; ++i) res |= (long long)buf[i] << 8*i;
+    return res;
+}
+
+static void encode_int64(long long value, unsigned char buf[8])
+{
+    int i;
+
+    for (i = 0; i < 8; ++i) buf[i] = (value >> 8*i)&0xff;
+}
+
 struct LzmaFileReader
 {
     ISeqInStream in;
@@ -67,25 +88,40 @@ static ISzAlloc szalloc = { lzma_alloc, lzma_free };
 size_t copy_lzmad(FILE *dst, FILE *src, size_t size_in)
 {
     unsigned char buf_in[4096], buf_out[4096];
-    size_t chunk, pos_in, avail_in, avail_out, size_out;
-    unsigned char header[LZMA_PROPS_SIZE + 8];
+    size_t chunk, pos_in, avail_in, avail_out, size_out, max_out;
+    unsigned char lzma_props[LZMA_PROPS_SIZE], uncompressed_size[8];
     CLzmaDec ld;
+    ELzmaFinishMode finish_mode;
     ELzmaStatus status;
     int res;
 
-    /* Initialize header (set unknown size; read other properties from file) */
-    memset(header, 0xff, sizeof(header));
-    if (fread(header, 1, LZMA_PROPS_SIZE, src) != LZMA_PROPS_SIZE)
+    /* Read LZMA properties */
+    if (size_in < LZMA_PROPS_SIZE ||
+        fread(lzma_props, 1, LZMA_PROPS_SIZE, src) != LZMA_PROPS_SIZE)
     {
         perror("Could not read LZMA properties");
         abort();
     }
     size_in -= LZMA_PROPS_SIZE;
     size_out = 0;
+    if (lzma_omit_uncompressed_size)
+    {
+        max_out = ~0;
+    }
+    else
+    {
+        if (size_in < 8 || fread(uncompressed_size, 8, 1, src) != 1)
+        {
+            perror("Could not read LZMA uncompressed size");
+            abort();
+        }
+        size_in -= 8;
+        max_out = decode_int64(uncompressed_size);
+    }
 
     /* Allocate decompressor */
     LzmaDec_Construct(&ld);
-    res = LzmaDec_Allocate(&ld, header, LZMA_PROPS_SIZE, &szalloc);
+    res = LzmaDec_Allocate(&ld, lzma_props, LZMA_PROPS_SIZE, &szalloc);
     assert(res == SZ_OK);
 
     LzmaDec_Init(&ld);
@@ -102,10 +138,20 @@ size_t copy_lzmad(FILE *dst, FILE *src, size_t size_in)
 
         do {
             /* Decode available input */
-            avail_in  = chunk - pos_in;
-            avail_out = sizeof(buf_out);
+            avail_in = chunk - pos_in;
+            if (sizeof(buf_out) < max_out - size_out)
+            {
+                avail_out   = sizeof(buf_out);
+                finish_mode = LZMA_FINISH_ANY;
+            }
+            else
+            {
+                avail_out   = max_out - size_out;
+                finish_mode = LZMA_FINISH_END; 
+            }
+
             if (LzmaDec_DecodeToBuf( &ld, buf_out, &avail_out,
-                buf_in + pos_in, &avail_in, LZMA_FINISH_ANY, &status ) != SZ_OK)
+                buf_in + pos_in, &avail_in, finish_mode, &status ) != SZ_OK)
             {
                 fprintf(stderr, "WARNING: LZMA decompression failed!\n");
                 goto end;
@@ -146,17 +192,26 @@ size_t copy_lzmac(FILE *dst, FILE *src, size_t size)
     int res;
     Byte props_data[LZMA_PROPS_SIZE];
     SizeT props_size;
+    unsigned char uncompressed_size[8];
 
     /* Select default encoder properties */
     LzmaEncProps_Init(&props);
     props.writeEndMark = 1;
     LzmaEncProps_Normalize(&props);
 
-    /* Allocate ccompressor */
+    /* Allocate compressor */
     leh = LzmaEnc_Create(&szalloc);
     assert(leh != NULL);
     res = LzmaEnc_SetProps(leh, &props);
     assert(res == SZ_OK);
+
+    /* Initialize input/output streams */
+    lfr.in.Read    = lzma_read;
+    lfr.fp         = src;
+    lfr.left       = size;
+    lfw.out.Write  = lzma_write;
+    lfw.fp         = dst;
+    lfw.written    = 0;
 
     /* Write properties to file */
     props_size = LZMA_PROPS_SIZE;
@@ -167,14 +222,18 @@ size_t copy_lzmac(FILE *dst, FILE *src, size_t size)
         perror("Write failed");
         abort();
     }
+    lfw.written += props_size;
 
-    /* Initialize input/output streams */
-    lfr.in.Read    = lzma_read;
-    lfr.fp         = src;
-    lfr.left       = size;
-    lfw.out.Write  = lzma_write;
-    lfw.fp         = dst;
-    lfw.written    = props_size;
+    if (!lzma_omit_uncompressed_size)
+    {
+        encode_int64(size, uncompressed_size);
+        if (fwrite(uncompressed_size, 8, 1, dst) != 1)
+        {
+            perror("Write failed");
+            abort();
+        }
+        lfw.written += 8;
+    }
 
     /* Compress */
     res = LzmaEnc_Encode(leh, &lfw.out, &lfr.in, NULL, &szalloc, &szalloc);
